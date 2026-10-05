@@ -1,0 +1,53 @@
+{
+  "name": "hydration-buddy",
+  "productName": "Hydration Buddy",
+  "version": "1.0.4",
+  "description": "A little buddy who walks across your screen every 2 hours to ask if you've had water.",
+  "main": "src/main.js",
+  "author": "Vijay",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --interval-seconds=20 --remind-now",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "test": "electron test/smoke.js yes",
+    "sync-buddy": "node scripts/sync-buddy.js",
+    "prestart": "node scripts/sync-buddy.js || true"
+  },
+  "build": {
+    "appId": "com.vijay.hydrationbuddy",
+    "productName": "Hydration Buddy",
+    "files": [
+      "src/**/*",
+      "!src/overlay.template.html",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.png",
+      "category": "public.app-category.healthcare-fitness"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.0.0"
+  }
+}

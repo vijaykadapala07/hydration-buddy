@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'">
+<title>Hydration Buddy</title>
+<style>
+@font-face { font-family: "Baloo 2"; font-weight: 600; src: url("fonts/baloo-2-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Baloo 2"; font-weight: 800; src: url("fonts/baloo-2-latin-800-normal.woff2") format("woff2"); }
+*{box-sizing:border-box}
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
+:root { --f-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif; }
+.hb-stage { position: fixed; inset: 0; }
+
+{{COMPONENT_CSS}}
+/* ---------- desktop overrides: walk the full width of the screen ---------- */
+/* JS sets --x-start / --x-center / --x-end in px and picks travel times from the distance,
+   rounded to whole step cycles so the legs still land on the same pose. */
+.hb-walker { bottom: -6px; left: var(--x-start, -160px); }
+.hb-walker[data-state="idle"] { left: var(--x-center); }
+@keyframes hb-enter { from { left: var(--x-start); } to { left: var(--x-center); } }
+@keyframes hb-exit-right { from { left: var(--x-center); } to { left: var(--x-end); } }
+@keyframes hb-exit-left { from { left: var(--x-center); } to { left: var(--x-start); } }
+.hb-walker[data-state="hidden"] { visibility: hidden; }
+.hb-svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.25)); }
+
+/* the question bubble carries the answer buttons */
+.hb-walker[data-state="idle"] .hb-bubble { display: grid; grid-template-columns: auto auto; column-gap: 10px; row-gap: 10px;
+  padding: 10px 14px 12px 10px; bottom: 192px; }
+.hb-answers { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: center; }
+.hb-btn { font: 800 1rem/1 var(--f-display); border: 3px solid #1E1A1A; border-radius: 999px; padding: 8px 18px 7px;
+  cursor: pointer; box-shadow: 0 3px 0 #1E1A1A; color: #fff; transition: transform .08s ease, box-shadow .08s ease; }
+.hb-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 0 #1E1A1A; }
+.hb-btn:active { transform: translateY(3px); box-shadow: 0 0 0 #1E1A1A; }
+.hb-btn.yes { background: #2F9E5F; }
+.hb-btn.no { background: #D0604F; }
+.hb-btn:focus-visible { outline: 3px solid #2B95E6; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="hb-stage">
+  <div class="hb-walker" id="buddy" data-state="hidden">
+    {{SHOUTS}}
+    <div class="hb-bubble" role="dialog" aria-label="Hydration check">
+      <span class="hb-bubble-icon" aria-hidden="true"><svg viewBox="0 0 16 20"><path d="M8 1 C8 1 1.5 9 1.5 13 a6.5 6.5 0 0 0 13 0 C14.5 9 8 1 8 1 Z" fill="#FFFFFF"/><path d="M4.8 13.5 a3.2 3.2 0 0 0 3.2 3.2" fill="none" stroke="#2B95E6" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+      <span class="hb-bubble-text"><span class="hb-bubble-kicker">Hydration check</span><span class="hb-bubble-line">Had a glass of <em>water</em> yet?</span></span>
+      <div class="hb-answers">
+        <button class="hb-btn yes" id="btn-yes" type="button">Yes!</button>
+        <button class="hb-btn no" id="btn-no" type="button">Not yet</button>
+      </div>
+    </div>
+        {{FACING}}
+  </div>
+</div>
+<script src="buddy-controller.js"></script>
+<script src="buddy.js"></script>
+</body>
+</html>

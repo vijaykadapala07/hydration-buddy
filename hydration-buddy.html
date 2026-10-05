@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hydration Buddy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+*{box-sizing:border-box} body{margin:0}
+/* Layout: one column; the walking stage up top, then the state timing table and trigger snippet. */
+:root {
+  --bg: #EDF4F7; --fg: #12303D; --muted: #557280; --line: #CFE0E8;
+  --panel: #FFFFFF; --accent: #1F7FB8; --accent-ink: #FFFFFF;
+  --sky-top: #D7EEF8; --sky-bottom: #F4FAFC; --ground: #A9D7A1; --ground-edge: #8CC484;
+  --yes: #2F8F5B; --no: #C2564B; --bubble: #FFFFFF; --bubble-ink: #12303D;
+  --f-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0D1B22; --fg: #DCEBF2; --muted: #8FAAB7; --line: #23404D;
+  --panel: #132630; --accent: #5BB6E8; --accent-ink: #08202B;
+  --sky-top: #10303F; --sky-bottom: #183E4F; --ground: #2F5A3A; --ground-edge: #3B6E47;
+  --yes: #5CC48A; --no: #E3786C; --bubble: #F2F8FB; --bubble-ink: #12303D; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0D1B22; --fg: #DCEBF2; --muted: #8FAAB7; --line: #23404D;
+  --panel: #132630; --accent: #5BB6E8; --accent-ink: #08202B;
+  --sky-top: #10303F; --sky-bottom: #183E4F; --ground: #2F5A3A; --ground-edge: #3B6E47;
+  --yes: #5CC48A; --no: #E3786C; --bubble: #F2F8FB; --bubble-ink: #12303D; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--f-body); }
+.page { max-width: 820px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 28px; }
+.page > * { min-width: 0; }
+h1, h2 { font-family: var(--f-display); line-height: 1.1; text-wrap: balance; margin: 0; }
+h1 { font-size: 2.4rem; font-weight: 800; }
+h2 { font-size: 1.45rem; font-weight: 600; }
+header p, section > p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+code, pre { font-family: var(--f-mono); font-size: .86rem; }
+
+/* ---------- stage + controls ---------- */
+.demo { display: grid; gap: 14px; }
+.hb-stage { position: relative; height: 290px; overflow: hidden; border-radius: 18px;
+  background: linear-gradient(var(--sky-top), var(--sky-bottom)); border: 1px solid var(--line); }
+.hb-ground { position: absolute; inset: auto 0 0 0; height: 36px; background: var(--ground); border-top: 3px solid var(--ground-edge); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { font: 700 .95rem var(--f-body); border: 0; border-radius: 999px; padding: 10px 18px; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); }
+.btn.yes { background: var(--yes); color: #fff; }
+.btn.no { background: var(--no); color: #fff; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:focus-visible, .loop input:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.loop { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); margin-left: auto; }
+.chip { font: .8rem var(--f-mono); padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+
+/* ---------- reference ---------- */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .92rem; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+
+/* =====================================================================
+   HYDRATION BUDDY COMPONENT (copy everything from here to END COMPONENT)
+   ===================================================================== */
+.hb-walker {
+  --hb-enter: 1.68s; --hb-happy: 2.24s; --hb-sad: 3.4s;     /* travel time  */
+  --step: .42s; --leg-amp: 26deg; --arm-amp: 28deg; --bob: -6px; /* gait */
+  position: absolute; bottom: 14px; left: -140px; width: 120px; height: 200px;
+}
+.hb-walker[data-state="idle"] { left: calc(50% - 60px); }
+.hb-walker[data-state="enter"] { animation: hb-enter var(--hb-enter) linear both; }
+.hb-walker[data-state="happy"] { animation: hb-exit-right var(--hb-happy) cubic-bezier(.45,.1,.7,.9) both;
+  --step: .32s; --leg-amp: 36deg; --arm-amp: 44deg; --bob: -11px; }
+.hb-walker[data-state="sad"] { animation: hb-exit-left var(--hb-sad) cubic-bezier(.4,.1,.6,.95) both;
+  --step: .68s; --leg-amp: 16deg; --arm-amp: 18deg; --bob: -2px; }
+@keyframes hb-enter { from { left: -140px; } to { left: calc(50% - 60px); } }
+@keyframes hb-exit-right { from { left: calc(50% - 60px); } to { left: calc(100% + 20px); } }
+@keyframes hb-exit-left { from { left: calc(50% - 60px); } to { left: -140px; } }
+
+.hb-facing { position: relative; width: 100%; height: 100%; }
+/* side view while walking, front view while waiting at the center */
+.hb-pose { position: absolute; inset: 0; }
+.hb-pose-front, .hb-pose-crawl { display: none; }
+.hb-walker[data-state="idle"] .hb-pose-side { display: none; }
+.hb-walker[data-state="idle"] .hb-pose-front { display: block; animation: hb-arrive .3s ease-out both; }
+.hb-walker[data-state="happy"] .hb-pose-side { animation: hb-turn .18s ease-out both; }
+/* on "No" he drops to his knees and crawls away crying */
+.hb-walker[data-state="sad"] .hb-pose-side { display: none; }
+.hb-walker[data-state="sad"] .hb-pose-crawl { display: block; animation: hb-drop .35s ease-out both; }
+.hb-walker[data-state="sad"] .hb-pose-crawl .hb-head { animation: hb-sob .34s ease-in-out infinite; }
+.hb-walker[data-state="sad"] .hb-tear-2 { animation-delay: -.85s; }
+.hb-walker[data-state="sad"] .hb-facing { transform: scaleX(-1); }
+.hb-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.hb-svg * { transform-box: fill-box; }
+.hb-leg, .hb-arm { transform-origin: 50% 0; }
+.hb-body { transform-origin: 50% 100%; }
+.hb-head { transform-origin: 50% 100%; transition: transform .4s ease; }
+.hb-eyes { transform-origin: 50% 50%; animation: hb-blink 4s infinite; }
+.hb-leg { --amp: var(--leg-amp); }
+.hb-arm { --amp: var(--arm-amp); }
+
+/* gait: legs and arms swing in opposition, body bobs twice per cycle */
+:is([data-state="enter"], [data-state="happy"], [data-state="sad"]) :is(.hb-leg, .hb-arm) {
+  animation: hb-swing var(--step) ease-in-out infinite; }
+:is([data-state="enter"], [data-state="happy"], [data-state="sad"]) :is(.hb-leg-back, .hb-arm-front) {
+  animation-delay: calc(var(--step) / -2); }
+:is([data-state="enter"], [data-state="happy"]) .hb-body {
+  animation: hb-waddle var(--step) ease-in-out infinite; }
+:is([data-state="enter"], [data-state="happy"]) .hb-pose-side .hb-head {
+  animation: hb-nod var(--step) ease-in-out infinite; }
+[data-state="sad"] .hb-body { animation: hb-bob var(--step) ease-in-out infinite; }
+[data-state="idle"] .hb-body { animation: hb-breathe 2.6s ease-in-out infinite; }
+.hb-hold { transform-origin: 50% 0; transition: transform .3s ease; }
+[data-state="happy"] .hb-hold { animation: hb-cheer calc(var(--step) * 2) ease-in-out infinite; }
+[data-state="sad"] .hb-hold { transform: translateY(4px); }
+[data-state="sad"] .hb-head { transform: translateY(3px) rotate(9deg); }
+
+/* moods: swap face parts (SVG display attributes are overridden by CSS) */
+.hb-walker[data-state="happy"] :is(.hb-mouth-happy, .hb-bottle, .hb-eyes-happy) { display: inline; }
+.hb-walker[data-state="happy"] .hb-eyes { display: none; }
+.hb-walker[data-state="sad"] :is(.hb-mouth-sad, .hb-brows-sad) { display: inline; }
+.hb-walker:is([data-state="happy"], [data-state="sad"]) .hb-mouth-neutral { display: none; }
+.hb-walker[data-state="sad"] .hb-brows-neutral { display: none; }
+.hb-walker[data-state="sad"] .hb-tear { display: inline; animation: hb-tear 1.7s ease-in infinite; }
+
+/* speech bubble, shown while waiting for the answer */
+.hb-bubble { position: absolute; bottom: 194px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  display: none; align-items: center; gap: 10px; padding: 9px 18px 10px 10px; border-radius: 24px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E2F3FD 100%); border: 3px solid #1E1A1A;
+  box-shadow: 0 5px 0 #1E1A1A; color: #12303D; }
+.hb-bubble::after { content: ""; position: absolute; left: 50%; bottom: -10px; width: 14px; height: 14px;
+  background: #E2F3FD; border: solid #1E1A1A; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0;
+  transform: translateX(-50%) rotate(45deg); }
+.hb-bubble-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+  background: #2B95E6; border: 2.5px solid #1E1A1A; }
+.hb-bubble-icon svg { width: 16px; height: 20px; display: block; }
+.hb-bubble-text { display: grid; gap: 1px; }
+.hb-bubble-kicker { font: 800 .68rem/1 var(--f-display, system-ui); letter-spacing: .12em; text-transform: uppercase; color: #2B95E6; }
+.hb-bubble-line { font: 800 1.12rem/1.1 var(--f-display, system-ui); }
+.hb-bubble-line em { font-style: normal; color: #1F7FC4; text-decoration: underline wavy #6CC1F0 2px; text-underline-offset: 4px; }
+.hb-walker[data-state="idle"] .hb-bubble { display: flex;
+  animation: hb-pop .4s cubic-bezier(.3,1.6,.6,1) both, hb-float 2.8s ease-in-out .4s infinite; }
+
+@keyframes hb-swing { 0%, 100% { transform: rotate(var(--amp)); } 50% { transform: rotate(calc(var(--amp) * -1)); } }
+@keyframes hb-cheer { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(-6px); } }
+@keyframes hb-bob { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(var(--bob)); } }
+@keyframes hb-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.02); } }
+@keyframes hb-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+@keyframes hb-tear { 0% { transform: translateY(-2px); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(16px); opacity: 0; } }
+@keyframes hb-waddle { 0%, 100% { transform: translateY(0) rotate(-4deg) scaleY(.97); } 25%, 75% { transform: translateY(var(--bob)) rotate(0deg) scaleY(1.02); }
+  50% { transform: translateY(0) rotate(4deg) scaleY(.97); } }
+@keyframes hb-nod { 0%, 50%, 100% { transform: rotate(-3deg); } 25%, 75% { transform: rotate(3deg); } }
+@keyframes hb-arrive { 0% { transform: scaleX(.1); } 55% { transform: translateY(-10px) scaleX(1.06); } 100% { transform: none; } }
+@keyframes hb-drop { 0% { transform: translateY(-14px) scaleY(1.1); } 60% { transform: translateY(2px) scaleY(.92); } 100% { transform: none; } }
+@keyframes hb-sob { 0%, 100% { transform: translateY(2px) rotate(6deg); } 50% { transform: translateY(-1px) rotate(3deg); } }
+@keyframes hb-turn { from { transform: scaleX(.15); } to { transform: scaleX(1); } }
+@keyframes hb-pop { from { transform: translateX(-50%) translateY(8px) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes hb-float { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
+
+/* attention grabber: no answer within 3 s, he jumps, shouts and waves the glass */
+.hb-pose-front { transform-origin: 50% 100%; }
+.hb-shout { position: absolute; bottom: 150px; display: none; pointer-events: none;
+  font: 800 1.6rem/1 var(--f-display, system-ui); color: #FF6B5E; -webkit-text-stroke: 1.5px #1E1A1A; }
+.hb-shout-l { left: -16px; --tilt: -18deg; }
+.hb-shout-r { right: -12px; --tilt: 16deg; }
+.hb-walker[data-attn="on"] .hb-shout { display: block; animation: hb-shout .3s ease-in-out infinite alternate; }
+.hb-walker[data-attn="on"] .hb-pose-front { animation: hb-jump 1.2s ease-out both; }
+.hb-walker[data-attn="on"] .hb-pose-front .hb-mouth-neutral { display: none; }
+.hb-walker[data-attn="on"] .hb-pose-front .hb-mouth-happy { display: inline; }
+.hb-walker[data-attn="on"] .hb-hold { animation: hb-cheer .3s ease-in-out infinite; }
+.hb-walker[data-attn="on"] .hb-bubble { animation: hb-wiggle .14s ease-in-out 6 alternate both; }
+.hb-walker[data-attn="on"] .hb-bubble-kicker { color: #E2574C; }
+@keyframes hb-jump {
+  0% { transform: none; } 8% { transform: scale(1.08, .9); } 20% { transform: translateY(-34px) scale(.95, 1.06); }
+  32% { transform: scale(1.08, .9); } 44% { transform: translateY(-26px) scale(.96, 1.05); } 56% { transform: scale(1.06, .92); }
+  68% { transform: translateY(-16px); } 80% { transform: scale(1.04, .95); } 100% { transform: none; } }
+@keyframes hb-shout { from { transform: rotate(var(--tilt)) scale(.85); } to { transform: rotate(var(--tilt)) translateY(-6px) scale(1.15); } }
+@keyframes hb-wiggle { from { transform: translateX(-50%) rotate(-3deg); } to { transform: translateX(-50%) rotate(3deg) scale(1.04); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .hb-walker, .hb-walker * { animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
+}
+/* ============================ END COMPONENT ============================ */
+</style>
+</head>
+<body>
+
+
+<main class="page">
+  <header>
+    <h1>Hydration Buddy</h1>
+    <p>A cartoon boy who walks in to ask if you have had water, cheers off to the right on a yes, and trudges back left on a no.</p>
+  </header>
+
+  <section class="demo" aria-label="Live demo">
+    <div class="hb-stage">
+      <div class="hb-ground"></div>
+      <div class="hb-walker" id="buddy" data-state="hidden">
+        <span class="hb-shout hb-shout-l" aria-hidden="true">!!</span><span class="hb-shout hb-shout-r" aria-hidden="true">!</span>
+        <div class="hb-bubble" role="status">
+          <span class="hb-bubble-icon" aria-hidden="true"><svg viewBox="0 0 16 20"><path d="M8 1 C8 1 1.5 9 1.5 13 a6.5 6.5 0 0 0 13 0 C14.5 9 8 1 8 1 Z" fill="#FFFFFF"/><path d="M4.8 13.5 a3.2 3.2 0 0 0 3.2 3.2" fill="none" stroke="#2B95E6" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+          <span class="hb-bubble-text"><span class="hb-bubble-kicker">Hydration check</span><span class="hb-bubble-line">Had a glass of <em>water</em> yet?</span></span>
+        </div>
+        <div class="hb-facing">
+<div class="hb-pose hb-pose-side"><svg xmlns="http://www.w3.org/2000/svg" class="hb-svg" viewBox="0 0 120 200" width="120" height="200" role="img" aria-label="Cute cartoon boy walking sideways with a glass of water">
+  <!-- Hydration Buddy side view (profile, facing right). Used while walking; buddy.svg is the front view.
+       Mood parts default to neutral; page CSS switches them via data-state (see NOTES.md). -->
+  <g class="hb-figure" stroke="#1E1A1A" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse class="hb-shadow" cx="60" cy="179" rx="24" ry="4.5" fill="#1B3A4B" fill-opacity="0.16" stroke="none"/>
+    <g class="hb-body">
+      <!-- back arm and leg (one shade darker) -->
+      <g class="hb-arm hb-arm-back">
+        <rect x="56.5" y="104" width="9" height="22" rx="4.5" fill="#E9B08F"/>
+        <circle cx="61" cy="127" r="5.5" fill="#E9B08F"/>
+        <rect x="54.5" y="94" width="13" height="15" rx="6" fill="#2380C8"/>
+      </g>
+      <g class="hb-leg hb-leg-back">
+        <rect x="55" y="144" width="11" height="26" rx="3" fill="#E9B08F"/>
+        <rect x="53" y="166" width="21" height="9" rx="4.5" fill="#E9B08F"/>
+      </g>
+      <!-- torso -->
+      <rect x="45" y="128" width="31" height="20" rx="4" fill="#C68A5A"/>
+      <rect x="44" y="91" width="33" height="44" rx="10" fill="#2B95E6"/>
+      <g class="hb-leg hb-leg-front">
+        <rect x="55" y="144" width="11" height="26" rx="3" fill="#F8CBAE"/>
+        <rect x="53" y="166" width="21" height="9" rx="4.5" fill="#F8CBAE"/>
+      </g>
+      <!-- head -->
+      <g class="hb-head">
+        <circle cx="95.5" cy="72" r="4.2" fill="#F8CBAE"/>
+        <ellipse cx="62" cy="60" rx="34" ry="33" fill="#F8CBAE"/>
+        <path d="M33 82 C22 66 25 42 41 30 L37 22 L48 25 C55 20 63 19 71 21 L75 13 L79 23 C87 26 93 32 96 42 L102 44 L95 50 C93 47 89 46 86 48 L84 55 L80 47 L75 54 L72 46 C65 48 59 51 57 57 C52 56 47 59 45 65 C43 71 41 77 39 84 Z" fill="#A4552C"/>
+        <path d="M47 31 C54 26 61 25 68 25" fill="none" stroke="#C7703D" stroke-width="2"/>
+        <circle cx="54" cy="68" r="8.5" fill="#F8CBAE"/>
+        <path d="M52 64 q4 3 0 8" fill="none" stroke-width="1.8"/>
+        <circle cx="80" cy="78" r="6.5" fill="#EE9988" fill-opacity="0.8" stroke="none"/>
+        <path class="hb-brows hb-brows-neutral" d="M78 58 Q82 55.5 86 58" fill="none" stroke-width="2.2"/>
+        <path class="hb-brows hb-brows-sad" d="M77 55.5 Q81 59 86 59" fill="none" stroke-width="2.2" display="none"/>
+        <g class="hb-eyes" stroke="none">
+          <ellipse cx="83" cy="67" rx="3.2" ry="4.6" fill="#1E1A1A"/>
+          <circle cx="84" cy="65.2" r="1.2" fill="#FFFFFF"/>
+        </g>
+        <path class="hb-eyes-happy" d="M79 68 Q83 62.5 87 68" fill="none" stroke-width="2.6" display="none"/>
+        <g class="hb-mouth hb-mouth-neutral">
+          <path d="M82 81 Q88 82.5 93 80 Q91.5 88.5 86.5 88.5 Q82.5 88 82 81 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M84 86 Q87.5 83.5 91 85.5 Q87.5 88 84 86 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <g class="hb-mouth hb-mouth-happy" display="none">
+          <path d="M80 80 Q88 82.5 95 78 Q93 91 86.5 91 Q81 90.5 80 80 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M83 87 Q87.5 84 92 86 Q87.5 89.5 83 87 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <path class="hb-mouth hb-mouth-sad" d="M82 86 Q87 81.5 92 85" fill="none" stroke-width="2.2" display="none"/>
+        <path class="hb-tear" d="M81 71 C81 71 78 76 78 78.5 a3 3 0 0 0 6 0 C84 76 81 71 81 71 Z" fill="#8AD3F7" stroke="#3E86B5" stroke-width="1.1" display="none"/>
+      </g>
+      <!-- front arm, carrying the glass -->
+      <g class="hb-arm hb-arm-front">
+        <rect x="56.5" y="104" width="9" height="22" rx="4.5" fill="#F8CBAE"/>
+        <path d="M60 110 H74 L72 132 H62 Z" fill="#EAF6FC"/>
+        <path d="M60.9 118 H73.1 L72.2 130.5 H61.8 Z" fill="#6CC1F0" stroke="none"/>
+        <path d="M63.5 113 L64 119" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+        <circle cx="62" cy="124" r="5.5" fill="#F8CBAE"/>
+        <rect x="54.5" y="94" width="13" height="15" rx="6" fill="#2B95E6"/>
+      </g>
+    </g>
+  </g>
+</svg></div>
+<div class="hb-pose hb-pose-front"><svg xmlns="http://www.w3.org/2000/svg" class="hb-svg" viewBox="0 0 120 200" width="120" height="200" role="img" aria-label="Cute cartoon boy holding a glass of water">
+  <!-- Hydration Buddy v3: chibi boy in a blue T-shirt and brown shorts, holding a glass of water
+       with both hands. Mood parts default to neutral; page CSS switches them via data-state (see NOTES.md). -->
+  <g class="hb-figure" stroke="#1E1A1A" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse class="hb-shadow" cx="60" cy="179" rx="26" ry="4.5" fill="#1B3A4B" fill-opacity="0.16" stroke="none"/>
+    <g class="hb-body">
+      <!-- bare legs and feet -->
+      <g class="hb-leg hb-leg-back">
+        <rect x="45" y="144" width="11" height="26" rx="3" fill="#F2BC9C"/>
+        <rect x="41.5" y="166" width="16" height="9" rx="4.5" fill="#F2BC9C"/>
+      </g>
+      <g class="hb-leg hb-leg-front">
+        <rect x="64" y="144" width="11" height="26" rx="3" fill="#F8CBAE"/>
+        <rect x="62.5" y="166" width="16" height="9" rx="4.5" fill="#F8CBAE"/>
+      </g>
+      <!-- shorts -->
+      <path d="M39 130 H81 L83 151 H62 L60 142 L58 151 H37 Z" fill="#C68A5A"/>
+      <path d="M42 134 q4 3 8 1 M78 134 q-4 3 -8 1" fill="none" stroke-width="1.6"/>
+      <!-- T-shirt with short sleeves -->
+      <path d="M44 92 H76 L90 100 L95 115 L85 119 L82 112 L82 135 H38 L38 112 L35 119 L25 115 L30 100 Z" fill="#2B95E6"/>
+      <path d="M52 92 Q60 99 68 92" fill="none" stroke-width="2"/>
+      <!-- head -->
+      <g class="hb-head">
+        <circle cx="24" cy="66" r="9" fill="#F8CBAE"/>
+        <path d="M22 62 q-3 4 1 9" fill="none" stroke-width="1.8"/>
+        <circle cx="96" cy="66" r="9" fill="#F8CBAE"/>
+        <path d="M98 62 q3 4 -1 9" fill="none" stroke-width="1.8"/>
+        <ellipse cx="60" cy="60" rx="36" ry="33" fill="#F8CBAE"/>
+        <path d="M25 74 C21 52 25 34 38 26 L34 19 L45 22 C51 17 59 16 65 17 L68 9 L73 18 C83 20 91 26 95 36 L102 34 L97 45 C99 54 98 64 95 73 C93 64 89 57 85 53 L83 61 L78 51 L73 59 L69 49 L63 58 L59 48 L53 57 L50 48 L43 58 L41 50 C35 56 29 64 25 74 Z" fill="#A4552C"/>
+        <path d="M44 30 C50 26 56 25 62 25 M76 28 C81 30 85 33 88 37" fill="none" stroke="#C7703D" stroke-width="2"/>
+        <circle cx="39" cy="77" r="7.5" fill="#EE9988" fill-opacity="0.8" stroke="none"/>
+        <circle cx="83" cy="77" r="7.5" fill="#EE9988" fill-opacity="0.8" stroke="none"/>
+        <g class="hb-brows hb-brows-neutral" fill="none" stroke-width="2.2">
+          <path d="M45 58 Q49 55.5 53 58"/>
+          <path d="M69 58 Q73 55.5 77 58"/>
+        </g>
+        <g class="hb-brows hb-brows-sad" fill="none" stroke-width="2.2" display="none">
+          <path d="M44 59 Q49 59 53 55.5"/>
+          <path d="M69 55.5 Q73 59 78 59"/>
+        </g>
+        <g class="hb-eyes" stroke="none">
+          <ellipse cx="49" cy="67" rx="3.4" ry="4.6" fill="#1E1A1A"/>
+          <ellipse cx="73" cy="67" rx="3.4" ry="4.6" fill="#1E1A1A"/>
+          <circle cx="50" cy="65.2" r="1.2" fill="#FFFFFF"/>
+          <circle cx="74" cy="65.2" r="1.2" fill="#FFFFFF"/>
+        </g>
+        <g class="hb-eyes-happy" fill="none" stroke-width="2.6" display="none">
+          <path d="M45 68 Q49 62.5 53 68"/>
+          <path d="M69 68 Q73 62.5 77 68"/>
+        </g>
+        <path d="M57.5 74 a3.5 3 0 0 1 7 0 a3.5 2.2 0 0 1 -7 0 Z" fill="#E9A487" stroke-width="2"/>
+        <g class="hb-mouth hb-mouth-neutral">
+          <path d="M54 79 Q61 80.5 68 79 Q67 88 61 88 Q55 88 54 79 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M57 85.5 Q61 82.5 65 85.5 Q61 87.5 57 85.5 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <g class="hb-mouth hb-mouth-happy" display="none">
+          <path d="M51 78 Q61 80.5 71 78 Q69 91 61 91 Q53 91 51 78 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M56 87 Q61 83 66 87 Q61 89.5 56 87 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <path class="hb-mouth hb-mouth-sad" d="M56 85 Q61 80 66 85" fill="none" stroke-width="2.2" display="none"/>
+        <path class="hb-tear" d="M77 70 C77 70 74 75 74 77.5 a3 3 0 0 0 6 0 C80 75 77 70 77 70 Z" fill="#8AD3F7" stroke="#3E86B5" stroke-width="1.1" display="none"/>
+      </g>
+      <!-- arms bent in front, both hands around a glass of water -->
+      <g class="hb-hold">
+        <path d="M27 113 C25 122 28 128 36 128 L50 126 L50 117 L38 118 C37 116 36 114 36 116 Z" fill="#F8CBAE"/>
+        <path d="M93 113 C95 122 92 128 84 128 L70 126 L70 117 L82 118 C83 116 84 114 84 116 Z" fill="#F8CBAE"/>
+        <path d="M50 99 H70 L67.5 133 H52.5 Z" fill="#EAF6FC"/>
+        <path d="M51.4 111 H68.6 L67.7 131.5 H52.3 Z" fill="#6CC1F0" stroke="none"/>
+        <path d="M54 104 L54.6 112" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+        <rect x="44" y="114" width="11" height="14" rx="5.5" fill="#F8CBAE"/>
+        <path d="M49 118 h5 M49 122 h5" fill="none" stroke-width="1.6"/>
+        <rect x="65" y="114" width="11" height="14" rx="5.5" fill="#F8CBAE"/>
+        <path d="M66 118 h5 M66 122 h5" fill="none" stroke-width="1.6"/>
+      </g>
+    </g>
+  </g>
+</svg></div>
+<div class="hb-pose hb-pose-crawl"><svg xmlns="http://www.w3.org/2000/svg" class="hb-svg" viewBox="0 0 120 200" width="120" height="200" role="img" aria-label="Cartoon boy crawling away on his knees, crying">
+  <!-- Hydration Buddy crawl pose (facing right, mirrored in the page to go left). Used for the "No" answer.
+       The head is the same art as buddy-side.svg, moved forward and down; it adds a wailing mouth and a second tear. -->
+  <g class="hb-figure" stroke="#1E1A1A" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse class="hb-shadow" cx="54" cy="179" rx="40" ry="4.5" fill="#1B3A4B" fill-opacity="0.16" stroke="none"/>
+    <g class="hb-body">
+      <!-- back arm and leg (one shade darker) -->
+      <g class="hb-arm hb-arm-back">
+        <rect x="60" y="140" width="9" height="32" rx="4.5" fill="#E9B08F"/>
+        <ellipse cx="66" cy="173" rx="7" ry="4.5" fill="#E9B08F"/>
+      </g>
+      <g class="hb-leg hb-leg-back">
+        <rect x="27" y="146" width="11" height="27" rx="5" fill="#E9B08F"/>
+        <rect x="10" y="165" width="28" height="10" rx="5" fill="#E9B08F"/>
+      </g>
+      <!-- torso, horizontal -->
+      <rect x="17" y="130" width="26" height="24" rx="8" fill="#C68A5A"/>
+      <rect x="32" y="126" width="44" height="30" rx="13" fill="#2B95E6"/>
+      <g class="hb-leg hb-leg-front">
+        <rect x="21" y="146" width="11" height="27" rx="5" fill="#F8CBAE"/>
+        <rect x="4" y="165" width="28" height="10" rx="5" fill="#F8CBAE"/>
+      </g>
+      <g class="hb-arm hb-arm-front">
+        <rect x="68" y="140" width="9" height="32" rx="4.5" fill="#F8CBAE"/>
+        <ellipse cx="74" cy="173" rx="7" ry="4.5" fill="#F8CBAE"/>
+        <rect x="65" y="134" width="14" height="13" rx="6" fill="#2B95E6"/>
+      </g>
+      <g transform="translate(20 52)">
+      <g class="hb-head">
+        <circle cx="95.5" cy="72" r="4.2" fill="#F8CBAE"/>
+        <ellipse cx="62" cy="60" rx="34" ry="33" fill="#F8CBAE"/>
+        <path d="M33 82 C22 66 25 42 41 30 L37 22 L48 25 C55 20 63 19 71 21 L75 13 L79 23 C87 26 93 32 96 42 L102 44 L95 50 C93 47 89 46 86 48 L84 55 L80 47 L75 54 L72 46 C65 48 59 51 57 57 C52 56 47 59 45 65 C43 71 41 77 39 84 Z" fill="#A4552C"/>
+        <path d="M47 31 C54 26 61 25 68 25" fill="none" stroke="#C7703D" stroke-width="2"/>
+        <circle cx="54" cy="68" r="8.5" fill="#F8CBAE"/>
+        <path d="M52 64 q4 3 0 8" fill="none" stroke-width="1.8"/>
+        <circle cx="80" cy="78" r="6.5" fill="#EE9988" fill-opacity="0.8" stroke="none"/>
+        <path class="hb-brows hb-brows-neutral" d="M78 58 Q82 55.5 86 58" fill="none" stroke-width="2.2"/>
+        <path class="hb-brows hb-brows-sad" d="M77 55.5 Q81 59 86 59" fill="none" stroke-width="2.2" display="none"/>
+        <g class="hb-eyes" stroke="none">
+          <ellipse cx="83" cy="67" rx="3.2" ry="4.6" fill="#1E1A1A"/>
+          <circle cx="84" cy="65.2" r="1.2" fill="#FFFFFF"/>
+        </g>
+        <path class="hb-eyes-happy" d="M79 68 Q83 62.5 87 68" fill="none" stroke-width="2.6" display="none"/>
+        <g class="hb-mouth hb-mouth-neutral">
+          <path d="M82 81 Q88 82.5 93 80 Q91.5 88.5 86.5 88.5 Q82.5 88 82 81 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M84 86 Q87.5 83.5 91 85.5 Q87.5 88 84 86 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <g class="hb-mouth hb-mouth-happy" display="none">
+          <path d="M80 80 Q88 82.5 95 78 Q93 91 86.5 91 Q81 90.5 80 80 Z" fill="#8E2D2D" stroke-width="2.2"/>
+          <path d="M83 87 Q87.5 84 92 86 Q87.5 89.5 83 87 Z" fill="#F07C7C" stroke="none"/>
+        </g>
+        <g class="hb-mouth hb-mouth-sad" display="none"><path d="M80 86 Q87 79 94 85 Q92.5 92 87 92 Q81 92 80 86 Z" fill="#8E2D2D" stroke-width="2.2"/><path d="M83 89.5 Q87 87 91 89 Q87 91.5 83 89.5 Z" fill="#F07C7C" stroke="none"/></g>
+        <path class="hb-tear hb-tear-2" transform="translate(-6 2)" d="M81 71 C81 71 78 76 78 78.5 a3 3 0 0 0 6 0 C84 76 81 71 81 71 Z" fill="#8AD3F7" stroke="#3E86B5" stroke-width="1.1" display="none"/>
+        <path class="hb-tear" d="M81 71 C81 71 78 76 78 78.5 a3 3 0 0 0 6 0 C84 76 81 71 81 71 Z" fill="#8AD3F7" stroke="#3E86B5" stroke-width="1.1" display="none"/>
+      </g>
+      </g>
+    </g>
+  </g>
+</svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="btn-remind" type="button">Send reminder</button>
+      <button class="btn yes" id="btn-yes" type="button" disabled>Yes</button>
+      <button class="btn no" id="btn-no" type="button" disabled>No</button>
+      <span class="chip" id="state-chip" aria-live="polite">state: hidden</span>
+      <label class="loop"><input type="checkbox" id="chk-loop"> Loop demo</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>States and timing</h2>
+    <p>Each travel lasts a whole number of steps, so the legs land in the same pose the next state starts from.</p>
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead><tr><th>State</th><th>Movement</th><th>Travel</th><th>Step cycle</th><th>Look</th><th>Ends in</th></tr></thead>
+        <tbody>
+          <tr><td><code>enter</code></td><td>Waddles in sideways from the left, hops round to face you</td><td class="num">1.68 s, steady</td><td class="num">0.42 s × 4</td><td>Bouncy waddle: body rocks ±4°, head nods, 6 px hop per step</td><td><code>idle</code></td></tr>
+          <tr><td><code>idle</code></td><td>Faces you at center, breathes, blinks. No answer in 3 s: jumps three times, shouts a funny line, repeats every 4 s</td><td class="num">loops</td><td class="num">2.6 s breath</td><td>Speech bubble asks the question</td><td>waits</td></tr>
+          <tr><td><code>happy</code></td><td>Turns sideways and jogs off to the right</td><td class="num">2.24 s, ease-in</td><td class="num">0.32 s × 7</td><td>Closed happy eye, big grin, big strides, 11 px bounce</td><td><code>hidden</code></td></tr>
+          <tr><td><code>sad</code></td><td>Drops to his knees and crawls back to the left</td><td class="num">3.4 s, slow</td><td class="num">0.68 s × 5</td><td>Wailing mouth, worried brows, two tears, sobbing head</td><td><code>hidden</code></td></tr>
+          <tr><td><code>hidden</code></td><td>Parked off-screen left</td><td class="num">none</td><td class="num">none</td><td>Not visible</td><td>next <code>enter</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Triggering each animation</h2>
+    <p>Set <code>data-state</code> on the walker, or use the small class below, which also resolves a promise when the walk finishes.</p>
+<pre style="margin-top:12px"><code>const buddy = new HydrationBuddy(document.getElementById('buddy'));
+
+await buddy.enter();   // walks in, then stays in "idle" with the bubble
+await buddy.yes();     // happy walk off to the right, then "hidden"
+await buddy.no();      // sad walk back to the left, then "hidden"
+
+// Every change fires an event you can hook into:
+el.addEventListener('buddy:state', e =&gt; console.log(e.detail.state));</code></pre>
+  </section>
+</main>
+
+<script>
+/* ---- HydrationBuddy controller (part of the component) ---- */
+class HydrationBuddy {
+  static TRAVEL = { enter: 'hb-enter', happy: 'hb-exit-right', sad: 'hb-exit-left' };
+  // Funny shouts used when nobody answers: [small label, headline]
+  static NUDGES = [
+    ['Hey! Over here!', 'Hellooo? Earth to <em>you</em>!'],
+    ['Psst!', "I'm drying up like a <em>raisin</em>!"],
+    ['Knock knock!', '<em>Water</em> you waiting for?'],
+    ['Excuse me!', 'Even your plants drink more than <em>you</em>!'],
+    ['Last call!', "Don't make me do the <em>splash</em> dance!"],
+  ];
+  constructor(el, { attentionDelay = 3000, nudgeEvery = 4000 } = {}) {
+    this.el = el;
+    this.state = el.dataset.state || 'hidden';
+    this._resolve = null;
+    this.attentionDelay = attentionDelay;
+    this.nudgeEvery = nudgeEvery;
+    this._kicker = el.querySelector('.hb-bubble-kicker');
+    this._line = el.querySelector('.hb-bubble-line');
+    this._original = [this._kicker?.innerHTML, this._line?.innerHTML];
+    this._nudges = 0;
+    this._nudgeTimer = null;
+    el.addEventListener('animationend', (e) => {
+      if (e.target !== el || HydrationBuddy.TRAVEL[this.state] !== e.animationName) return;
+      const finished = this.state;
+      this._set(finished === 'enter' ? 'idle' : 'hidden');
+      const resolve = this._resolve; this._resolve = null;
+      if (resolve) resolve(finished);
+    });
+  }
+  _set(state) {
+    this.state = state;
+    this.el.dataset.state = state;
+    this._stopNudging();
+    if (state === 'idle') this._nudgeTimer = setTimeout(() => this._nudge(), this.attentionDelay);
+    this.el.dispatchEvent(new CustomEvent('buddy:state', { detail: { state }, bubbles: true }));
+  }
+  play(state) {
+    if (this._resolve) { this._resolve(null); this._resolve = null; } // interrupted walk
+    this.el.dataset.state = 'none'; void this.el.offsetWidth;            // restart CSS animation
+    this._set(state);
+    if (!HydrationBuddy.TRAVEL[state]) return Promise.resolve(state);
+    return new Promise((resolve) => { this._resolve = resolve; });
+  }
+  // No answer yet: jump, shout the next funny line, and try again every few seconds
+  _nudge() {
+    const [kicker, line] = HydrationBuddy.NUDGES[this._nudges++ % HydrationBuddy.NUDGES.length];
+    if (this._kicker) this._kicker.innerHTML = kicker;
+    if (this._line) this._line.innerHTML = line;
+    this.el.dataset.attn = 'off'; void this.el.offsetWidth; // restart the jump
+    this.el.dataset.attn = 'on';
+    this.el.dispatchEvent(new CustomEvent('buddy:nudge', { detail: { kicker, count: this._nudges }, bubbles: true }));
+    this._nudgeTimer = setTimeout(() => this._nudge(), this.nudgeEvery);
+  }
+  _stopNudging() {
+    clearTimeout(this._nudgeTimer);
+    if (!this.el.dataset.attn) return;
+    delete this.el.dataset.attn;
+    if (this._kicker) this._kicker.innerHTML = this._original[0];
+    if (this._line) this._line.innerHTML = this._original[1];
+  }
+  enter() { return this.play('enter'); }
+  yes() { return this.play('happy'); }
+  no() { return this.play('sad'); }
+}
+
+/* ---- demo wiring ---- */
+(() => {
+  const el = document.getElementById('buddy');
+  const buddy = new HydrationBuddy(el);
+  const remind = document.getElementById('btn-remind');
+  const yes = document.getElementById('btn-yes');
+  const no = document.getElementById('btn-no');
+  const chip = document.getElementById('state-chip');
+  const loop = document.getElementById('chk-loop');
+  let timer = null, nextAnswerYes = true;
+
+  el.addEventListener('buddy:state', (e) => {
+    const s = e.detail.state;
+    chip.textContent = 'state: ' + s;
+    remind.disabled = s !== 'hidden';
+    yes.disabled = no.disabled = s !== 'idle';
+    clearTimeout(timer);
+    if (!loop.checked) return;
+    if (s === 'hidden') timer = setTimeout(() => buddy.enter(), 700);
+    if (s === 'idle') timer = setTimeout(() => { nextAnswerYes ? buddy.yes() : buddy.no(); nextAnswerYes = !nextAnswerYes; }, 1600);
+  });
+  remind.addEventListener('click', () => buddy.enter());
+  yes.addEventListener('click', () => buddy.yes());
+  no.addEventListener('click', () => buddy.no());
+  loop.addEventListener('change', () => {
+    clearTimeout(timer);
+    if (!loop.checked) return;
+    if (buddy.state === 'hidden') buddy.enter();
+    else if (buddy.state === 'idle') el.dispatchEvent(new CustomEvent('buddy:state', { detail: { state: 'idle' } }));
+  });
+  buddy.enter(); // open on the first prompt so the page shows the character right away
+})();
+</script>
+
+</body>
+</html>
